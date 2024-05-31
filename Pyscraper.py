@@ -1,0 +1,243 @@
+{
+  "nbformat": 4,
+  "nbformat_minor": 0,
+  "metadata": {
+    "colab": {
+      "provenance": [],
+      "authorship_tag": "ABX9TyOKVxt3cTStoZ490gg2ZmHc",
+      "include_colab_link": true
+    },
+    "kernelspec": {
+      "name": "python3",
+      "display_name": "Python 3"
+    },
+    "language_info": {
+      "name": "python"
+    }
+  },
+  "cells": [
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "view-in-github",
+        "colab_type": "text"
+      },
+      "source": [
+        "<a href=\"https://colab.research.google.com/github/PencilNeck666/PencilNeck666/blob/main/Pyscraper.py\" target=\"_parent\"><img src=\"https://colab.research.google.com/assets/colab-badge.svg\" alt=\"Open In Colab\"/></a>"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "5CJLbj2NdsRg"
+      },
+      "outputs": [],
+      "source": []
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "!pip install requests\n",
+        "!pip install bs4\n",
+        "!pip install geoip2\n",
+        "\n",
+        "\n",
+        "\n",
+        "\n",
+        "import requests\n",
+        "from bs4 import BeautifulSoup\n",
+        "import socket\n",
+        "from geoip2 import database\n",
+        "import os\n",
+        "import argparse\n",
+        "\n",
+        "def get_public_ip():\n",
+        "    try:\n",
+        "        response = requests.get('https://api.ipify.org?format=json')\n",
+        "        response.raise_for_status()\n",
+        "        return response.json().get('ip')\n",
+        "    except Exception as e:\n",
+        "        print(f\"Error getting public IP: {e}\")\n",
+        "        return None\n",
+        "\n",
+        "def gather_information(urls, username=None, name=None):\n",
+        "    \"\"\"\n",
+        "    This function scrapes data from multiple websites, extracts IP information, and analyzes the data.\n",
+        "\n",
+        "    Args:\n",
+        "        urls: A comma-separated string of URLs of the websites to scrape.\n",
+        "        username: The user handle to filter by (optional).\n",
+        "        name: The person's name to filter by (optional).\n",
+        "\n",
+        "    Returns:\n",
+        "        A list of dictionaries, each containing the scraped data, IP information, and analysis results for each URL.\n",
+        "    \"\"\"\n",
+        "    results = []\n",
+        "    url_list = urls.split(',')\n",
+        "\n",
+        "    for url in url_list:\n",
+        "        url = url.strip()  # Remove any leading/trailing whitespace\n",
+        "        result = {}\n",
+        "        try:\n",
+        "            # Scrape data from the website\n",
+        "            response = requests.get(url)\n",
+        "            response.raise_for_status()  # Ensure we notice bad responses\n",
+        "            soup = BeautifulSoup(response.content, \"html.parser\")\n",
+        "\n",
+        "            # Replace these with actual class names used on the website\n",
+        "            data = soup.find_all(class_=\"some_class\")\n",
+        "            user_handles = soup.find_all(class_=\"user-handle\")\n",
+        "            person_names = soup.find_all(class_=\"person-name\")\n",
+        "\n",
+        "            # Extract text from BeautifulSoup objects\n",
+        "            user_handles_text = [handle.get_text(strip=True) for handle in user_handles]\n",
+        "            person_names_text = [name.get_text(strip=True) for name in person_names]\n",
+        "\n",
+        "            # Filter data based on username or name\n",
+        "            filtered_data = []\n",
+        "            for item in data:\n",
+        "                item_text = item.get_text(strip=True)\n",
+        "                if (username and any(username in handle for handle in user_handles_text)) or \\\n",
+        "                   (name and any(name in pname for pname in person_names_text)):\n",
+        "                    filtered_data.append(item_text)\n",
+        "\n",
+        "        except requests.RequestException as e:\n",
+        "            print(f\"Error fetching the URL {url}: {e}\")\n",
+        "            continue\n",
+        "\n",
+        "        # Extract IP information\n",
+        "        public_ip = get_public_ip()\n",
+        "        if not public_ip:\n",
+        "            continue\n",
+        "\n",
+        "        try:\n",
+        "            geoip_db_path = 'GeoLite2-City.mmdb'\n",
+        "            if not os.path.exists(geoip_db_path):\n",
+        "                raise FileNotFoundError(f\"GeoIP database not found at path: {geoip_db_path}\")\n",
+        "            reader = database.Reader(geoip_db_path)\n",
+        "            geo_info = reader.city(public_ip)\n",
+        "        except Exception as e:\n",
+        "            print(f\"Error with GeoIP lookup: {e}\")\n",
+        "            continue\n",
+        "\n",
+        "        # Analyze the data (e.g., count the number of elements)\n",
+        "        data_count = len(filtered_data)\n",
+        "\n",
+        "        # Prepare the result for this URL\n",
+        "        result = {\n",
+        "            \"url\": url,\n",
+        "            \"scraped_data\": filtered_data,\n",
+        "            \"public_ip\": public_ip,\n",
+        "            \"city\": geo_info.city.name if geo_info.city else \"Unknown\",\n",
+        "            \"country\": geo_info.country.name if geo_info.country else \"Unknown\",\n",
+        "            \"data_count\": data_count,\n",
+        "            \"user_handles\": user_handles_text,\n",
+        "            \"person_names\": person_names_text\n",
+        "        }\n",
+        "        results.append(result)\n",
+        "\n",
+        "    return results\n",
+        "\n",
+        "def main():\n",
+        "    parser = argparse.ArgumentParser(description='Scrape data from websites and gather IP information.')\n",
+        "    parser.add_argument('urls', type=str, help='Comma-separated URLs of the websites to scrape.')\n",
+        "    parser.add_argument('--username', type=str, help='User handle to filter by.', default=None)\n",
+        "    parser.add_argument('--name', type=str, help=\"Person's name to filter by.\", default=None)\n",
+        "\n",
+        "    args = parser.parse_args()\n",
+        "\n",
+        "    results = gather_information(args.urls, username=args.username, name=args.name)\n",
+        "\n",
+        "    # Print the results\n",
+        "    for result in results:\n",
+        "        print(f\"URL: {result['url']}\")\n",
+        "        print(f\"Scraped data: {result['scraped_data']}\")\n",
+        "        print(f\"Public IP: {result['public_ip']}\")\n",
+        "        print(f\"City: {result['city']}\")\n",
+        "        print(f\"Country: {result['country']}\")\n",
+        "        print(f\"Number of data points: {result['data_count']}\")\n",
+        "        print(f\"User handles: {result['user_handles']}\")\n",
+        "        print(f\"Person names: {result['person_names']}\")\n",
+        "        print(\"------\")\n",
+        "\n",
+        "if __name__ == \"__main__\":\n",
+        "    main()\n"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/",
+          "height": 593
+        },
+        "id": "qUSXOCrZbhe6",
+        "outputId": "296d7b15-989b-4fad-8447-edf0c5435c53"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Requirement already satisfied: requests in /usr/local/lib/python3.10/dist-packages (2.31.0)\n",
+            "Requirement already satisfied: charset-normalizer<4,>=2 in /usr/local/lib/python3.10/dist-packages (from requests) (3.3.2)\n",
+            "Requirement already satisfied: idna<4,>=2.5 in /usr/local/lib/python3.10/dist-packages (from requests) (3.7)\n",
+            "Requirement already satisfied: urllib3<3,>=1.21.1 in /usr/local/lib/python3.10/dist-packages (from requests) (2.0.7)\n",
+            "Requirement already satisfied: certifi>=2017.4.17 in /usr/local/lib/python3.10/dist-packages (from requests) (2024.2.2)\n",
+            "Requirement already satisfied: bs4 in /usr/local/lib/python3.10/dist-packages (0.0.2)\n",
+            "Requirement already satisfied: beautifulsoup4 in /usr/local/lib/python3.10/dist-packages (from bs4) (4.12.3)\n",
+            "Requirement already satisfied: soupsieve>1.2 in /usr/local/lib/python3.10/dist-packages (from beautifulsoup4->bs4) (2.5)\n",
+            "Requirement already satisfied: geoip2 in /usr/local/lib/python3.10/dist-packages (4.8.0)\n",
+            "Requirement already satisfied: aiohttp<4.0.0,>=3.6.2 in /usr/local/lib/python3.10/dist-packages (from geoip2) (3.9.5)\n",
+            "Requirement already satisfied: maxminddb<3.0.0,>=2.5.1 in /usr/local/lib/python3.10/dist-packages (from geoip2) (2.6.1)\n",
+            "Requirement already satisfied: requests<3.0.0,>=2.24.0 in /usr/local/lib/python3.10/dist-packages (from geoip2) (2.31.0)\n",
+            "Requirement already satisfied: setuptools>=60.0.0 in /usr/local/lib/python3.10/dist-packages (from geoip2) (67.7.2)\n",
+            "Requirement already satisfied: aiosignal>=1.1.2 in /usr/local/lib/python3.10/dist-packages (from aiohttp<4.0.0,>=3.6.2->geoip2) (1.3.1)\n",
+            "Requirement already satisfied: attrs>=17.3.0 in /usr/local/lib/python3.10/dist-packages (from aiohttp<4.0.0,>=3.6.2->geoip2) (23.2.0)\n",
+            "Requirement already satisfied: frozenlist>=1.1.1 in /usr/local/lib/python3.10/dist-packages (from aiohttp<4.0.0,>=3.6.2->geoip2) (1.4.1)\n",
+            "Requirement already satisfied: multidict<7.0,>=4.5 in /usr/local/lib/python3.10/dist-packages (from aiohttp<4.0.0,>=3.6.2->geoip2) (6.0.5)\n",
+            "Requirement already satisfied: yarl<2.0,>=1.0 in /usr/local/lib/python3.10/dist-packages (from aiohttp<4.0.0,>=3.6.2->geoip2) (1.9.4)\n",
+            "Requirement already satisfied: async-timeout<5.0,>=4.0 in /usr/local/lib/python3.10/dist-packages (from aiohttp<4.0.0,>=3.6.2->geoip2) (4.0.3)\n",
+            "Requirement already satisfied: charset-normalizer<4,>=2 in /usr/local/lib/python3.10/dist-packages (from requests<3.0.0,>=2.24.0->geoip2) (3.3.2)\n",
+            "Requirement already satisfied: idna<4,>=2.5 in /usr/local/lib/python3.10/dist-packages (from requests<3.0.0,>=2.24.0->geoip2) (3.7)\n",
+            "Requirement already satisfied: urllib3<3,>=1.21.1 in /usr/local/lib/python3.10/dist-packages (from requests<3.0.0,>=2.24.0->geoip2) (2.0.7)\n",
+            "Requirement already satisfied: certifi>=2017.4.17 in /usr/local/lib/python3.10/dist-packages (from requests<3.0.0,>=2.24.0->geoip2) (2024.2.2)\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "usage: colab_kernel_launcher.py [-h] [--username USERNAME] [--name NAME] urls\n",
+            "colab_kernel_launcher.py: error: unrecognized arguments: -f\n"
+          ]
+        },
+        {
+          "output_type": "error",
+          "ename": "SystemExit",
+          "evalue": "2",
+          "traceback": [
+            "An exception has occurred, use %tb to see the full traceback.\n",
+            "\u001b[0;31mSystemExit\u001b[0m\u001b[0;31m:\u001b[0m 2\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "/usr/local/lib/python3.10/dist-packages/IPython/core/interactiveshell.py:3561: UserWarning: To exit: use 'exit', 'quit', or Ctrl-D.\n",
+            "  warn(\"To exit: use 'exit', 'quit', or Ctrl-D.\", stacklevel=1)\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [],
+      "metadata": {
+        "id": "qdo_-OcDEkml"
+      },
+      "execution_count": null,
+      "outputs": []
+    }
+  ]
+}
